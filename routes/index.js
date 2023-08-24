@@ -7,11 +7,14 @@ const {
   validCreateUser,
   validLogin,
 } = require('../middlewares/validation');
+const checkAuth = require('../middlewares/auth');
 
 router.post('/signup', validCreateUser, createUser);
 router.post('/signin', validLogin, login);
-router.post('/signout', logout);
 
+router.use(checkAuth);
+
+router.post('/signout', logout);
 router.use('/users', require('./users'));
 router.use('/movies', require('./movies'));
 
