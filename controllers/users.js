@@ -1,31 +1,33 @@
 /* eslint-disable consistent-return */
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const User = require('../models/user');
-const { OK, CREATED } = require('../errors/responses');
-const { generateToken } = require('../utils/token');
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+const User = require("../models/user");
+const { OK, CREATED } = require("../errors/responses");
+const { generateToken } = require("../utils/token");
 
-const BadRequestError = require('../errors/bad-request-err');
-const ConflictError = require('../errors/conflict-err');
-const UnauthorizedError = require('../errors/unauthorized-err');
+const BadRequestError = require("../errors/bad-request-err");
+const ConflictError = require("../errors/conflict-err");
+const UnauthorizedError = require("../errors/unauthorized-err");
 
 // Создание пользователя
 module.exports.createUser = async (req, res, next) => {
   try {
-    const {
-      email, password, name,
-    } = req.body;
+    const { email, password, name } = req.body;
     if (await User.findOne({ email })) {
-      throw new ConflictError('Данный email уже зарегистрирован');
+      throw new ConflictError("Данный email уже зарегистрирован");
     }
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({
-      email, password: hash, name,
+      email,
+      password: hash,
+      name,
     });
-    return res.status(CREATED).send(user);
+    return res
+      .status(CREATED)
+      .send({ _id: user._id, email: user.email, name: user.name });
   } catch (err) {
     if (err instanceof mongoose.Error.ValidationError) {
-      next(new BadRequestError('Ошибка при создании пользователя'));
+      next(new BadRequestError("Ошибка при создании пользователя"));
     }
     next(err);
   }
@@ -34,15 +36,27 @@ module.exports.createUser = async (req, res, next) => {
 // Обновление данных пользователя
 module.exports.updateUser = async (req, res, next) => {
   try {
+    let oldEmail = '';
     const { email, name } = req.body;
-    if (await User.findOne({ email })) {
-      throw new ConflictError('Данный email уже зарегистрирован');
+    const _id = req.user._id;
+    let user = await User.findById(req.user._id);
+    if (user) {
+      oldEmail = user.email;
+    } else {
+      throw new BadRequestError("Ошибка чтения профиля пользователя");
     }
-    const user = await User.findByIdAndUpdate(req.user._id, { email, name }, { returnDocument: 'after', runValidators: true, new: true });
+    if (oldEmail !== email && await User.findOne({ email })) {
+      throw new ConflictError("Данный email уже зарегистрирован");
+    }
+    user = await User.findByIdAndUpdate(
+      req.user._id,
+      { email, name },
+      { returnDocument: 'after', runValidators: true, new: true },
+    );
     return res.status(OK).send(user);
   } catch (err) {
     if (err instanceof mongoose.Error.ValidationError) {
-      next(new BadRequestError('Ошибка при введении данных'));
+      next(new BadRequestError("Ошибка при введении данных"));
     }
     next(err);
   }
@@ -52,21 +66,22 @@ module.exports.updateUser = async (req, res, next) => {
 module.exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      throw new UnauthorizedError('Неверный email или пароль');
+      throw new UnauthorizedError("Неверный email или пароль");
     }
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
-      throw new UnauthorizedError('Неверный email или пароль');
+      throw new UnauthorizedError("Неверный email или пароль");
     }
     const payload = { _id: user._id };
     const token = generateToken(payload);
-    res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: true });
+    const oneWeek = 7 * 24 * 3600 * 1000;
+    res.cookie("jwt", token, { httpOnly: true, secure: true, sameSite: true, maxAge: oneWeek });
     return res.status(OK).send(payload);
   } catch (err) {
     if (err instanceof mongoose.Error.ValidationError) {
-      next(new UnauthorizedError('Неверный email или пароль'));
+      next(new UnauthorizedError("Неверный email или пароль"));
     }
     next(err);
   }
@@ -75,8 +90,8 @@ module.exports.login = async (req, res, next) => {
 // Выход из системы
 module.exports.logout = async (req, res, next) => {
   try {
-    res.clearCookie('jwt');
-    return res.status(OK).send({ message: 'logout' });
+    res.clearCookie("jwt");
+    return res.status(OK).send({ message: "logout" });
   } catch (err) {
     next(err);
   }
@@ -89,7 +104,7 @@ module.exports.getUserInfo = async (req, res, next) => {
     return res.status(OK).send(user);
   } catch (err) {
     if (err instanceof mongoose.Error.CastError) {
-      next(new BadRequestError('Ошибка при введении данных'));
+      next(new BadRequestError("Ошибка при введении данных"));
     }
     next(err);
   }
